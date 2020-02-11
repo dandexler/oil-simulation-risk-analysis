@@ -28,6 +28,17 @@ analysis_data <- as.data.frame(df[3:nrow(df), ])
 
 colnames(analysis_data) <-  c("year", "high_oil_price", "low_oil_price", "aeo2018_ref")
 
+# Standardize function
+standardize <- function(x){
+  x.std = (x - mean(x))/sd(x)
+  return(x.std)
+}
+
+# Destandardize function
+destandardize <- function(x.std, x){
+  x.old = (x.std * sd(x)) + mean(x)
+  return(x.old)
+}
 
 
 
@@ -45,19 +56,7 @@ colnames(analysis_data) <-  c("year", "high_oil_price", "low_oil_price", "aeo201
 # Reference Production Risk - Continued above the 1-15 loop
 ####################################
 
-# Standardize function
-standardize <- function(x){
-  x.std = (x - mean(x))/sd(x)
-  return(x.std)
-}
-
-# Destandardize function
-destandardize <- function(x.std, x){
-  x.old = (x.std * sd(x)) + mean(x)
-  return(x.old)
-}
-
-simulation_size <- 1000000
+cor_simulation_size <- 1000000
 sample_size = 100
 correlation_coef <- 0.64
 
@@ -66,18 +65,19 @@ R <- matrix(data=cbind(1,correlation_coef, correlation_coef, 1), nrow=2)
 U <- t(chol(R))
 
 set.seed(1234)
-production_rate_year1_IP <- rlnorm(simulation_size, meanlog = log(420), sdlog = log(120))
+production_rate_year1_IP <- rlnorm(cor_simulation_size, meanlog = 6, sdlog = .28)
 
 set.seed(1234)
-production_decline_rate <- runif(simulation_size, min = .15, max = 0.32)
-X2u <- rnorm(sample_size*simulation_size, mean = 0, sd = 1)
+production_decline_rate <- runif(cor_simulation_size, min = .15, max = 0.32)
+X2u <- rnorm(sample_size*cor_simulation_size, mean = 0, sd = 1)
 
 Both <- cbind(standardize(production_rate_year1_IP), standardize(production_decline_rate))
 correlated_IP_decline <- U %*% t(Both)
 correlated_IP_decline <- t(correlated_IP_decline)
 
+correlated_IP_decline <- destandardize(correlated_IP_decline, cbind(production_rate_year1_IP, production_decline_rate) )
 
-
+all_oil_volume <- c()
 
 # Distribution of Net Present Value for simulated oil wells over 15 years
 for (i in 1:simulation_size) {
@@ -156,8 +156,8 @@ for (i in 1:simulation_size) {
   # Reference Production Risk outside of main loop
   ####################################
   
-  prod_rate_decline <- correlated_IP_decline[i, 2]
-  rate_yr_begin <- correlated_IP_decline[i, 1]
+  prod_rate_decline <- destandardize(correlated_IP_decline[i, 2])
+  rate_yr_begin <- destandardize(correlated_IP_decline[i, 1])
   
   
   # Barrel production rate at the end of the year in BOPD
@@ -166,12 +166,31 @@ for (i in 1:simulation_size) {
   # Yearly production volumes in barrels of oil
   # This is an average daily rate to estimate the total volume over the year
   oil_volume <- 365 * (rate_yr_begin+rate_yr_end)/2
+  all_oil_volume <- c(all_oil_volume, oil_volume) # This is for testing only
+  
+  ####################################
+  # Operating expenses
+  # Build distributions for the next 15 years of the project 
+  # Using Price Projections worksheet in Analysis_Data
+  # Net revenue interest. NRI is the percentage of oil
+  # revenue retained after paying royalties
+  # Normal distribution
+  # Mean = 75%
+  # std dev = 2%
+  # Done per well for the life of the well
+  # Annual revenues = oil price * annual production
+  ####################################
+  
+  set.seed(1234)
+  revenue.interest = rnorm(simulation_size, mean = .75, sd = .02)
   
 
   
   #####################################################################################################
   # 15 years simulated for each well
   #####################################################################################################
+  
+  revenue.annual <- c()
   
   for (j in 1:15){
     
@@ -186,61 +205,52 @@ for (i in 1:simulation_size) {
     set.seed(1234)
     cost.yr_j_professional <- rtriangle(n = 1, a = 172000, b = 279500, c = 215000) #CHECK: Does it mean costs will remain constant 
     # dist will remain constant?
+    
+    # NEED TO CLARIFY ASSUMPTIONS HERE
+    
+    
+    ####################################
+    # Revenue Risk
+    # Build distributions for the next 15 years of the project 
+    # Using Price Projections worksheet in Analysis_Data
+    # Use Triangle Distribution with best case, worst case, typical
+    # Net revenue interest. NRI is the percentage of oil
+    # revenue retained after paying royalties
+    # Normal distribution
+    # Mean = 75%
+    # std dev = 2%
+    # Done per well for the life of the well
+    # Annual revenues = oil price * annual production
+    ####################################
+    
+    revenue.per_barrel <- rtriangle(1, a=analysis_data$low_oil_price[j], b=analysis_data$high_oil_price[j], c=analysis_data$aeo2018_ref[j])
+    revenue.net_revenue_interest <- oil_volume * revenue.per_barrel * revenue.interest
+    
+    
+    
+    
+    
+    
+    ####################################
+    # Operating Expenses
+    # Build distributions for the next 15 years of the project 
+    # Using Price Projections worksheet in Analysis_Data
+    # Use Triangle Distribution with best case, worst case, typical
+    # Net revenue interest. NRI is the percentage of oil
+    # revenue retained after paying royalties
+    # Normal distribution
+    # Mean = 75%
+    # std dev = 2%
+    # Done per well for the life of the well
+    # Annual revenues = oil price * annual production
+    ####################################
+    
+    
   }
-}
+  
+  
+  
+} 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-####################################
-# Revenue Risk
-# Build distributions for the next 15 years of the project 
-# Using Price Projections worksheet in Analysis_Data
-# Net revenue interest. NRI is the percentage of oil
-# revenue retained after paying royalties
-# Normal distribution
-# Mean = 75%
-# std dev = 2%
-# Done per well for the life of the well
-# Annual revenues = oil price * annual production
-####################################
-
-set.seed(1234)
-Units = rnorm(simulation_size, mean = .75, sd = .02)
-
-# NEEDS COMPLETED
-
-
-
-
-
-####################################
-# Operating expenses
-# Build distributions for the next 15 years of the project 
-# Using Price Projections worksheet in Analysis_Data
-# Net revenue interest. NRI is the percentage of oil
-# revenue retained after paying royalties
-# Normal distribution
-# Mean = 75%
-# std dev = 2%
-# Done per well for the life of the well
-# Annual revenues = oil price * annual production
-####################################
 
 
